@@ -1,0 +1,498 @@
+ALTER TABLE Communities
+ADD cSize number;  /* cSize sütununu ekledim, community size bilgisini saklamak için*/
+
+select COMMUNITY_ID, count(node_id) as nodeCount from nodes
+where nodes.community_id IN (select community_id from communities)
+group by community_id
+ORDER BY community_id ASC; /*community member sizelarını listeler*/
+
+select * from movements
+where timestep_from=1 and timestep_to=3; /* nonconsecutive olanlar hesaba katılmamış */
+
+
+select distinct community_id 
+from nodes
+where timestep = 5
+order by community_id ASC; /*time step bazında community idlerini aldım*/
+
+
+insert into intersections(c1_id, c2_id, commonnodecounts)
+select t1.community_id as c_t1, t2.community_id as c_t2, count(t1.node_id)
+from nodes t1,nodes t2
+where t1.timestep=1 and t2.timestep=2 and t1.node_id=t2.node_id
+group by t1.community_id, t2.community_id 
+ORDER BY t1.community_id ASC;  /*for finding shared number of nodes in a community pair*/
+
+
+select t1.c1_id, t2.csize as c1size, t1.c2_id, t3. csize as c2size 
+from intersections t1, communities t2, communities t3
+where t1.c1_id=t2.community_id and t1.c2_id = t3.community_id 
+order by t1.c1_id ASC; /*community sizes for intersections table*/
+
+
+ALTER TABLE intersections
+ADD c1Size number
+ADD c2Size number
+ADD JS double precision;
+
+
+select t1.c2_id, t2.csize as c2size from intersections t1, COMMUNITIES t2
+where t1.c2_id = t2.COMMUNITY_ID; /*community2 nin size bilgilerini elde ettik.*/
+
+select t1.c1_id, t2.csize as c1size from intersections t1, COMMUNITIES t2
+where t1.c1_id = t2.COMMUNITY_ID; /*community1 in size bilgilerini elde ettik.*/
+
+
+select t2.csize as c1size from COMMUNITIES t2, intersections t1
+where t1.c1_id = t2.COMMUNITY_ID; /*community1 in size bilgilerini elde ettik.*/
+
+
+select c1_id, c2_id,commonnodecounts, c1size, c2size,
+commonnodecounts/(c1size+c2size-commonnodecounts) as js
+from intersections; /*calculate js*/
+
+select c1_id, c2_id , js
+from intersections
+where js>1; /*checking js values */
+
+/*fill matches table*/
+insert into matches
+select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+from intersections t1, communities t2, communities t3
+where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+order by c1_id ASC;
+
+/*t=1 anındaki topluluklardan t=2 anı için match etmeyenleri bulalım*/
+insert into notMatchedCommunities
+ select distinct(c1_id) from intersections 
+ where intersections.c1_id not in(select c1 from matches)
+ order by intersections.c1_id;
+ 
+/*şimdi bu t=1 deki match etmeyelen topluluklar için t=3 anına bakalım*/
+delete from intersections;
+
+insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)
+select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize
+from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5
+where t2.community_id IN (select distinct (community_id) from nodes where timestep=3)
+and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+and t2.community_id = t5.community_id
+group by t1.cid, t2.community_id, t4.csize, t5.csize
+order by t1.cid;
+
+
+select c1_id, c2_id,commonnodecounts, c1size, c2size,                
+commonnodecounts/(c1size+c2size-commonnodecounts) as js
+from intersections; /*calculate js*/
+
+/*add to matches table*/
+insert into matches
+select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+from intersections t1, communities t2, communities t3
+where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+order by c1_id ASC;
+
+/*t=1 anındaki topluluklardan t=3 anı için match etmeyenleri bulalım*/
+delete from notmatchedcommunities;
+
+insert into notMatchedCommunities
+ select distinct(c1_id) from intersections 
+ where intersections.c1_id not in(select c1 from matches)
+ order by intersections.c1_id;
+ 
+/*şimdi bu t=1 deki match etmeyelen topluluklar için t=4 anına bakalım*/
+ delete from intersections;
+
+insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)
+select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize  
+from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5  
+where t2.community_id IN (select distinct (community_id) from nodes where timestep=4)
+and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+and t2.community_id = t5.community_id
+group by t1.cid, t2.community_id, t4.csize, t5.csize
+order by t1.cid;
+
+select c1_id, c2_id,commonnodecounts, c1size, c2size,        
+commonnodecounts/(c1size+c2size-commonnodecounts) as js
+from intersections; /*calculate js*/
+
+/*add js manually to the js column of the intersections table*/
+
+/*add to matches table*/
+insert into matches
+select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+from intersections t1, communities t2, communities t3
+where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+order by c1_id ASC;
+
+/*t=1 anındaki topluluklardan t=4 anı için match etmeyenleri bulalım*/
+delete from notmatchedcommunities;
+
+insert into notMatchedCommunities
+ select distinct(c1_id) from intersections 
+ where intersections.c1_id not in(select c1 from matches)
+ order by intersections.c1_id;
+ 
+/*şimdi bu t=1 deki match etmeyelen topluluklar için t=5 anına bakalım*/
+ delete from intersections;
+ 
+ insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)
+ select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize
+ from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5  
+ where t2.community_id IN (select distinct (community_id) from nodes where timestep=5)
+ and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+ and t2.community_id = t5.community_id
+ group by t1.cid, t2.community_id, t4.csize, t5.csize
+ order by t1.cid;
+ 
+ /*create a view to store js calculation*/
+ create view  jsview AS
+ select c1_id, c2_id,commonnodecounts, c1size, c2size,     
+ commonnodecounts/(c1size+c2size-commonnodecounts) as js
+ from intersections; /*calculate js*/
+ 
+ insert into intersections(js)
+ select js from jsview;
+ 
+ /*add to matches table*/
+ insert into matches
+ select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+ from intersections t1, communities t2, communities t3
+ where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+ order by c1_id ASC;
+ 
+ /*t=1 anındaki topluluklardan t=5 anı için match etmeyenleri bulalım*/
+ delete from notmatchedcommunities;
+ 
+  /*son timestepte olduğumuz için kalanlar dissolve etti demektir.*/
+  insert into notMatchedCommunities
+  select distinct(c1_id) from intersections 
+  where intersections.c1_id not in(select c1 from matches)
+  order by intersections.c1_id;
+  
+  /*dissolve edenleri matches tablosuna ekleyelim.*/
+  insert into matches
+  select t1.cid, t1.cid, 1 as t1, 1 as t2, t2.csize,t2.csize
+  from notmatchedcommunities t1, communities t2
+  where t1.cid=t2.community_id;
+  
+  /*Şimdi t=2 ve t=3 time steplerindeki toplulukları karşılaştıralım*/
+  delete from intersections;
+  delete from jsview;
+  delete from notmatchedcommunities;
+  
+  /*intersections tablosunun bazı sütunlarını girelim.*/  
+  insert into intersections(c1_id, c2_id, commonnodecounts)
+  select t1.community_id as c_t1, t2.community_id as c_t2, count(t1.node_id)
+  from nodes t1,nodes t2
+  where t1.timestep=2 and t2.timestep=3 and t1.node_id=t2.node_id
+  group by t1.community_id, t2.community_id 
+  ORDER BY t1.community_id ASC  /*for finding shared number of nodes in a community pair*/
+  
+  /*size bilgilerini elde edelim*/  
+  select t2.csize, t3.csize from intersections t1, communities t2,communities t3
+  where t1.c1_id=t2.community_id and t1.c2_id=t3.community_id;
+  /*manual olarak bu size bilgilerini intersections tablosuna ekleyelim.*/
+  
+  select c1_id, c2_id,commonnodecounts, c1size, c2size,
+  commonnodecounts/(c1size+c2size-commonnodecounts) as js
+  from intersections; /*calculate js*/
+  
+  select c1_id, c2_id , js
+  from intersections
+  where js>1; /*checking js values */
+  
+  /*fill matches table*/
+  insert into matches
+  select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+  from intersections t1, communities t2, communities t3
+  where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+  order by c1_id ASC;
+  
+  /*t=2 anındaki topluluklardan t=3 anı için match etmeyenleri bulalım*/
+  insert into notMatchedCommunities
+   select distinct(c1_id) from intersections 
+   where intersections.c1_id not in(select c1 from matches)
+   order by intersections.c1_id;
+   
+   
+/*şimdi bu t=2 deki match etmeyelen topluluklar için t=4 anına bakalım*/   
+delete from intersections;   
+   
+insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)   
+select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize
+from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5
+where t2.community_id IN (select distinct (community_id) from nodes where timestep=4)
+and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+and t2.community_id = t5.community_id
+group by t1.cid, t2.community_id, t4.csize, t5.csize
+order by t1.cid;
+
+select c1_id, c2_id,commonnodecounts, c1size, c2size,        
+commonnodecounts/(c1size+c2size-commonnodecounts) as js
+from intersections; /*calculate js*/
+
+/*add js manually to the js column of the intersections table*/
+
+/*add to matches table*/
+insert into matches
+select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+from intersections t1, communities t2, communities t3
+where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+order by c1_id ASC;
+
+/*t=2 anındaki topluluklardan t=4 anı için match etmeyenleri bulalım*/
+delete from notmatchedcommunities;
+
+insert into notMatchedCommunities
+ select distinct(c1_id) from intersections 
+ where intersections.c1_id not in(select c1 from matches)
+ order by intersections.c1_id;
+ 
+ /*şimdi bu t=2 deki match etmeyelen topluluklar için t=5 anına bakalım*/
+  delete from intersections;
+  
+  insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)
+  select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize
+  from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5  
+  where t2.community_id IN (select distinct (community_id) from nodes where timestep=5)
+  and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+  and t2.community_id = t5.community_id
+  group by t1.cid, t2.community_id, t4.csize, t5.csize
+  order by t1.cid;
+  
+  /*calculate js*/
+  select c1_id, c2_id,commonnodecounts, c1size, c2size,     
+  commonnodecounts/(c1size+c2size-commonnodecounts) as js
+  from intersections; /*calculate js*/
+  
+  /*manually copy js into intersections table*/
+   /*add to matches table*/
+   insert into matches
+   select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+   from intersections t1, communities t2, communities t3
+   where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+   order by c1_id ASC;
+   
+   /*t=2 anındaki topluluklardan t=5 anı için match etmeyenleri bulalım*/
+   delete from notmatchedcommunities;
+   
+    /*son timestepte olduğumuz için kalanlar dissolve etti demektir.*/
+    insert into notMatchedCommunities
+    select distinct(c1_id) from intersections 
+    where intersections.c1_id not in(select c1 from matches)
+    order by intersections.c1_id;
+    
+    /*dissolve edenleri matches tablosuna ekleyelim.*/
+    insert into matches
+    select t1.cid, t1.cid, 1 as t1, 1 as t2, t2.csize,t2.csize
+    from notmatchedcommunities t1, communities t2
+    where t1.cid=t2.community_id;
+    
+    
+    /*Şimdi t=3 ve t=4 time steplerindeki toplulukları karşılaştıralım*/
+    delete from intersections;
+    delete from jsview;
+    delete from notmatchedcommunities;
+    
+    /*intersections tablosunun bazı sütunlarını girelim.*/  
+    insert into intersections(c1_id, c2_id, commonnodecounts)
+    select t1.community_id as c_t1, t2.community_id as c_t2, count(t1.node_id)
+    from nodes t1,nodes t2
+    where t1.timestep=3 and t2.timestep=4 and t1.node_id=t2.node_id
+    group by t1.community_id, t2.community_id 
+    ORDER BY t1.community_id ASC  /*for finding shared number of nodes in a community pair*/
+    
+     /*size bilgilerini elde edelim*/  
+     select t2.csize, t3.csize from intersections t1, communities t2,communities t3
+     where t1.c1_id=t2.community_id and t1.c2_id=t3.community_id;
+     /*manual olarak bu size bilgilerini intersections tablosuna ekleyelim.*/
+     
+     /*calculate js*/
+     select c1_id, c2_id,commonnodecounts, c1size, c2size,
+     commonnodecounts/(c1size+c2size-commonnodecounts) as js
+     from intersections; 
+     /*manual olarak js değerlerini intersectionsa kopyalayalım.*/
+     
+     select c1_id, c2_id , js
+     from intersections
+     where js>1; /*checking js values */
+     
+
+/*add to matches table*/
+insert into matches     
+select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+from intersections t1, communities t2, communities t3
+where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+order by c1_id ASC;
+
+/*t=3 anındaki topluluklardan t=4 anı için match etmeyenleri bulalım*/
+delete from notmatchedcommunities;
+
+insert into notMatchedCommunities
+ select distinct(c1_id) from intersections 
+ where intersections.c1_id not in(select c1 from matches)
+ order by intersections.c1_id;
+ 
+  /*şimdi bu t=3 deki match etmeyelen topluluklar için t=5 anına bakalım*/
+   delete from intersections;
+   
+   insert into intersections(c1_id,c2_id,commonnodecounts,c1size,c2size)
+   select distinct(t1.cid), t2.community_id, count(t2.NODE_ID)as commonnodecounts, t4.csize, t5.csize
+   from notmatchedcommunities t1,nodes t2, nodes t3, communities t4, communities t5  
+   where t2.community_id IN (select distinct (community_id) from nodes where timestep=5)
+   and t1.cid=t3.COMMUNITY_ID and t2.NODE_ID=t3.NODE_ID and t1.cid= t4.community_id
+   and t2.community_id = t5.community_id
+   group by t1.cid, t2.community_id, t4.csize, t5.csize
+   order by t1.cid;
+   
+    /*calculate js*/
+    select c1_id, c2_id,commonnodecounts, c1size, c2size,     
+    commonnodecounts/(c1size+c2size-commonnodecounts) as js
+    from intersections; /*calculate js*/
+    
+    /*manually copy js into intersections table*/
+     /*add to matches table*/
+     insert into matches
+     select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+     from intersections t1, communities t2, communities t3
+     where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+     order by c1_id ASC;
+     
+
+  /*t=3 anındaki topluluklardan t=5 anı için match etmeyenleri bulalım*/
+  delete from notmatchedcommunities;     
+  
+   /*son timestepte olduğumuz için kalanlar dissolve etti demektir.*/
+   insert into notMatchedCommunities
+   select distinct(c1_id) from intersections 
+   where intersections.c1_id not in(select c1 from matches)
+   order by intersections.c1_id;
+   
+   /*dissolve edenleri matches tablosuna ekleyelim.*/
+   insert into matches
+   select t1.cid, t1.cid, 1 as t1, 1 as t2, t2.csize,t2.csize
+   from notmatchedcommunities t1, communities t2
+   where t1.cid=t2.community_id;
+   
+   
+    /*Şimdi t=4 ve t=5 time steplerindeki toplulukları karşılaştıralım*/
+    delete from intersections;
+    delete from jsview;
+    delete from notmatchedcommunities;
+    
+    /*intersections tablosunun bazı sütunlarını girelim.*/  
+    insert into intersections(c1_id, c2_id, commonnodecounts)
+    select t1.community_id as c_t1, t2.community_id as c_t2, count(t1.node_id)
+    from nodes t1,nodes t2
+    where t1.timestep=4 and t2.timestep=5 and t1.node_id=t2.node_id
+    group by t1.community_id, t2.community_id 
+    ORDER BY t1.community_id ASC;  /*for finding shared number of nodes in a c
+    
+    
+    /*size bilgilerini elde edelim*/  
+    select t2.csize, t3.csize from intersections t1, communities t2,communities t3  
+    where t1.c1_id=t2.community_id and t1.c2_id=t3.community_id;  
+    /*manual olarak bu size bilgilerini intersections tablosuna ekleyelim.*/  
+      
+    select c1_id, c2_id,commonnodecounts, c1size, c2size,  
+    commonnodecounts/(c1size+c2size-commonnodecounts) as js  
+    from intersections; /*calculate js*/  
+      
+    select c1_id, c2_id , js  
+    from intersections  
+    where js>1; /*checking js values */  
+    
+  /*add to matches table*/
+  insert into matches     
+  select t1.c1_id, t1.c2_id, t2.birth_timestep,  t3.birth_timestep, t1.c1size, t1.c2size
+  from intersections t1, communities t2, communities t3
+  where t1.js>= 0.1 and t1.c1_id=t2.community_id and t1.c2_id=t3.community_id 
+  order by c1_id ASC;
+  
+    /*t=4 anındaki topluluklardan t=5 anı için match etmeyenleri bulalım*/
+    delete from notmatchedcommunities;     
+    
+     /*son timestepte olduğumuz için kalanlar dissolve etti demektir.*/
+     insert into notMatchedCommunities
+     select distinct(c1_id) from intersections 
+     where intersections.c1_id not in(select c1 from matches)
+     order by intersections.c1_id;
+     
+     /*dissolve edenleri matches tablosuna ekleyelim.*/
+     insert into matches
+     select t1.cid, t1.cid, 1 as t1, 1 as t2, t2.csize,t2.csize
+     from notmatchedcommunities t1, communities t2
+     where t1.cid=t2.community_id;
+     
+     
+  /*NOW we can continue with event detection*/
+  /*add an event column to matches*/
+  alter table matches
+  add event varchar(10);   
+  
+  /*FORM is not regarded, because for prediction a community must be born already*/
+  
+  /*DISSOLVE*/
+  UPDATE matches
+  SET event = 'dissolve'
+  WHERE t1 =  1 and t2 = 1;
+  
+ UPDATE matches
+ SET event = '' 
+ WHERE event <> 'dissolve';
+ 
+ 
+ Update matches
+ set event = 'split'
+ where c1 IN (Select c1 from matches
+              group by c1
+              having count(C1)>1);
+
+
+Update matches
+set event = 'merge'
+where c2 IN (Select c2 from matches
+             where event is null
+             group by c2 
+             having count(C2)>1);
+
+
+  /*tekrarlı kayıtları silelim*/
+ DELETE FROM
+     matches A
+  WHERE
+    a.rowid >
+     ANY (
+       SELECT
+          B.rowid
+       FROM
+          matches B
+       WHERE
+          A.c1 = B.C1
+          and A.c2 = B.c2
+          and A.t1 = B.t1
+          and A.t2=B.t2
+          and A.c1size = B.C1SIZE
+          and A.c2size = B. c2size);
+  
+  
+  /*GROW*/
+  UPDATE matches
+  SET event = 'grow'
+  WHERE event is null and t1<t2 and (c1size*1.05)<c2size;
+  
+  /*SHRINK*/
+  UPDATE matches
+  SET event = 'shrink'
+  WHERE event is null and t1<t2 and c2size<(c1size*0.95);
+  
+  /*CONTINUE*/
+   UPDATE matches
+   SET event = 'continue'
+   where event is null;
+   
+   select c2,event from matches
+   order by c2 asc;
+  
+  
